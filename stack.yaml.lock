@@ -3,7 +3,28 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: Z-IO-0.4.0.0@sha256:49fb68f970b80b239c098f7a272956b9280235b6eab7858e90c23b4d0521b528,19286
+    pantry-tree:
+      size: 12663
+      sha256: e9fb47705b4ef47b6c3731bb73d3a28e08aef96fb5195c3b5ebce6573b4c1224
+  original:
+    hackage: Z-IO-0.4.0.0@sha256:49fb68f970b80b239c098f7a272956b9280235b6eab7858e90c23b4d0521b528,19286
+- completed:
+    hackage: Z-Data-0.4.0.0@sha256:9b65845ca74fd3f1063388289faf77239268ace49b07644f58ca8b867c410495,17647
+    pantry-tree:
+      size: 10973
+      sha256: e81fe9d46c1429bcf42ab1f0d2fccafda17ff1e813afbceca5d7d22411495542
+  original:
+    hackage: Z-Data-0.4.0.0@sha256:9b65845ca74fd3f1063388289faf77239268ace49b07644f58ca8b867c410495,17647
+- completed:
+    hackage: primitive-0.7.1.0@sha256:e7a412791f676df3e5cd5df6e8282fb2925932b0f7e1f51cd590deec369e945a,2728
+    pantry-tree:
+      size: 1376
+      sha256: b0ad351a5416b27a0fde2380936db4f296ef81294720097b9c56bef0a2b02a66
+  original:
+    hackage: primitive-0.7.1.0@sha256:e7a412791f676df3e5cd5df6e8282fb2925932b0f7e1f51cd590deec369e945a,2728
 snapshots:
 - completed:
     size: 533053

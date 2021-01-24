@@ -50,6 +50,7 @@ executable DHTPal-exe
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       DHTPal
+    , Z-IO
     , base
     , binary
     , bytestring

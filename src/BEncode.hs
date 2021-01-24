@@ -3,20 +3,17 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module BEncode
-  ( BEncode (..),
-  )
+  ( BEncode (..),)
 where
 
-import Data.Binary ( Get, Binary(get, put), Put )
-import Data.Binary.Get ( getByteString, lookAheadM )
-
+import Data.Binary (Binary (get, put), Get, Put)
+import Data.Binary.Get (getByteString, lookAheadM)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
-
 import Data.Char (digitToInt, isDigit)
 import qualified Data.Map as M
 import Data.Word ()
-import GHC.Generics ( Generic )
+import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack)
 
 data BEncode
@@ -24,7 +21,6 @@ data BEncode
   | BStr B.ByteString
   | BList [BEncode]
   | BDict (M.Map B.ByteString BEncode)
-  | Wrong
   deriving (Eq, Ord, Show, Generic)
 
 encodeString :: String -> Put
@@ -39,36 +35,37 @@ instance Binary BEncode where
   put (BList bs) = put 'l' >> putElems bs >> put 'e'
     where
       putElems (x : xs) = put x >> putElems xs
-      putElems [] = do put ()
+      putElems [] = put ()
   put (BDict ms) = M.foldlWithKey f (put 'd') ms >> put 'e'
     where
+      f :: Put -> B.ByteString -> BEncode -> Put
       f a k b = a >> put (BStr k) >> put b
 
   get = do
     c <- get
     case c of
-      c | isDigit c -> readBStr c
       'i' -> readBInt
+      c | isDigit c -> readBStr c
       'l' -> readBList
       'd' -> readBDict
-      _ -> return Wrong
+      _ -> fail "bad encoding"
 
-digitToInteger :: Char -> Integer
-digitToInteger = toInteger . digitToInt
+throwError :: MonadFail m => m a
+throwError = fail "error decoding bytestring"
 
 readInt' :: Int -> Get Int
 readInt' acc = do
   d <- lookAheadM digit'
-  case d of
-    Just d -> readInt' (acc * 10 + digitToInt d)
-    Nothing -> return acc
+  return (maybe acc (\digit -> acc * 10 + digitToInt digit) d)
   where
     digit' = do
       d' <- get
       return
-        if isDigit d' then Just d'
-                      else Nothing
+        if isDigit d'
+          then Just d'
+          else Nothing
 
+-- TODO : Handle negavite numbers
 readBInt :: Get BEncode
 readBInt = do
   d <- get
@@ -76,11 +73,10 @@ readBInt = do
     then do
       n <- readInt' (digitToInt d)
       e <- get
-      return
-        if e == 'e'
-          then BInt (toInteger n)
-          else Wrong
-    else return Wrong
+      if e == 'e'
+        then return (BInt (toInteger n))
+        else throwError
+    else throwError
 
 readBStr :: Char -> Get BEncode
 readBStr d = do
@@ -88,46 +84,31 @@ readBStr d = do
   col <- get
   if col == ':'
     then fmap BStr (getByteString sz)
-    else return Wrong
+    else throwError
 
 readBList :: Get BEncode
 readBList = do
   items <- getItems []
   e <- get
-  return
-    if e == 'e'
-      then BList items
-      else Wrong
+  if e == 'e'
+    then return (BList items)
+    else throwError
   where
+    getItems :: [BEncode] -> Get [BEncode]
     getItems acc = do
-      i <- lookAheadM maybeItem
-      case i of
-        Just its -> getItems (acc ++ [its])
-        Nothing -> return acc
-    maybeItem = do
-      mi <- get
-      return case mi of
-        Wrong -> Nothing
-        i -> Just i
+      i <- get
+      getItems (acc ++ [i])
 
 readBDict :: Get BEncode
 readBDict = do
   items <- getKeysNItems []
   e <- get
-  return
-    if e == 'e'
-      then BDict (M.fromList items)
-      else Wrong
+  if e == 'e'
+    then return (BDict (M.fromList items))
+    else throwError
   where
+    getKeysNItems :: [(C8.ByteString, BEncode)] -> Get [(C8.ByteString, BEncode)]
     getKeysNItems acc = do
-      mk <- lookAheadM maybeKey
-      case mk of
-        Just k -> do
-          v <- get
-          getKeysNItems (acc ++ [(k, v)])
-        Nothing -> return acc
-    maybeKey = do
-      mi <- get
-      return case mi of
-        BStr k -> Just k
-        _ -> Nothing
+      k <- get
+      v <- get
+      getKeysNItems (acc ++ [(k, v)])

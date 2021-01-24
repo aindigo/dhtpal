@@ -48,6 +48,7 @@ executables:
     - bytestring
     - binary
     - containers
+    - Z-IO
 
 tests:
   DHTPal-test:
