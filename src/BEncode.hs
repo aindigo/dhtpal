@@ -1,3 +1,4 @@
+
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -44,19 +45,29 @@ instance Binary BEncode where
   get = do
     c <- get
     case c of
-      'i' -> readBInt
+      'i' -> do
+        sign <- lookAheadM signDigit
+        maybe (throwError c) readBInt sign
       c | isDigit c -> readBStr c
       'l' -> readBList
       'd' -> readBDict
-      _ -> fail "bad encoding"
+      _ -> fail ("ee bad encoding " ++ show c)
+      where
+        signDigit :: Get (Maybe (Integer, Integer))
+        signDigit = do
+          s <- get
+          case s of
+            '-' -> return (Just (-1, 0))
+            s | isDigit s -> return (Just (1, toInteger (digitToInt s)))
+            _ -> return Nothing
 
-throwError :: MonadFail m => m a
-throwError = fail "error decoding bytestring"
+throwError :: MonadFail m => Char -> m a
+throwError c = fail ("error decoding bytestring : " ++ show c)
 
-readInt' :: Int -> Get Int
+readInt' :: Integer -> Get Integer
 readInt' acc = do
   d <- lookAheadM digit'
-  return (maybe acc (\digit -> acc * 10 + digitToInt digit) d)
+  maybe (return acc) (\digit -> readInt' (acc * 10 + toInteger (digitToInt digit))) d
   where
     digit' = do
       d' <- get
@@ -65,26 +76,21 @@ readInt' acc = do
           then Just d'
           else Nothing
 
--- TODO : Handle negavite numbers
-readBInt :: Get BEncode
-readBInt = do
-  d <- get
-  if isDigit d
-    then do
-      n <- readInt' (digitToInt d)
+readBInt :: (Integer, Integer) -> Get BEncode
+readBInt (sign, fd) = do
+      n <- readInt' fd
       e <- get
       if e == 'e'
-        then return (BInt (toInteger n))
-        else throwError
-    else throwError
+        then return (BInt (sign * toInteger n))
+        else throwError e
 
 readBStr :: Char -> Get BEncode
 readBStr d = do
-  sz <- readInt' (digitToInt d)
+  sz <- readInt' (toInteger (digitToInt d))
   col <- get
   if col == ':'
-    then fmap BStr (getByteString sz)
-    else throwError
+    then fmap BStr (getByteString (fromIntegral sz))
+    else throwError col
 
 readBList :: Get BEncode
 readBList = do
@@ -92,7 +98,7 @@ readBList = do
   e <- get
   if e == 'e'
     then return (BList items)
-    else throwError
+    else throwError e
   where
     getItems :: [BEncode] -> Get [BEncode]
     getItems acc = do
@@ -105,7 +111,7 @@ readBDict = do
   e <- get
   if e == 'e'
     then return (BDict (M.fromList items))
-    else throwError
+    else throwError e
   where
     getKeysNItems :: [(C8.ByteString, BEncode)] -> Get [(C8.ByteString, BEncode)]
     getKeysNItems acc = do

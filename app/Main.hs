@@ -1,59 +1,18 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Main where
 
-import Lib
+import BEncode (BEncode)
+import NodeId (nodeId, distance)
 
-import System.IO
+import Z.IO.Network ( recvUDPLoop, ipv4, SocketAddr, initUDP )
+import Z.Data.Vector (Bytes)
+import Z.IO.Network.UDP
 
-import Control.Concurrent
-import Control.Monad (forever, unless, void)
-import Control.Monad.Trans.State
-import qualified Control.Exception as E
+import Z.IO.Resource (withResource)
 
-import qualified Data.ByteString as S
-
-import Network.Socket
-import Network.Socket.ByteString
-
-openSocket addr = socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)
-
-suma :: Integer
-suma = 1 + 1
-
-sumas :: Num a => Maybe a -> Maybe a -> Maybe a
-sumas a b = (+) <$> a <*> b
-
-suma' :: Num a => Maybe a -> Maybe a -> Maybe a
-suma' (Just a) (Just b) = Just (a + b)
-suma' _ _ = Nothing
-
-runUDPSocket :: Maybe HostName -> ServiceName -> ((S.ByteString, SockAddr) -> IO a) -> IO a
-runUDPSocket hn port fn = withSocketsDo $ do
-    addr <- resolve
-    E.bracket (open addr) close loop
-  where
-
-    resolve = do
-      let hints = defaultHints {
-                    addrFlags = [AI_PASSIVE] ,
-                    addrSocketType = Datagram
-                               }
-      head <$> getAddrInfo (Just hints) hn (Just port)
-
-    open addr = E.bracketOnError (openSocket addr) close $ \sock -> do
-      setSocketOption sock ReuseAddr 1
-      withFdSocket sock setCloseOnExecIfNeeded
-      bind sock $ addrAddress addr
-      return sock
-
-    loop sock = forever $ E.bracketOnError (recvFrom sock 1500) fn
-      $ \t -> do
-          let _ = fn t
-          hFlush stdout
-          loop sock
+udpConfig :: UDPConfig
+udpConfig = UDPConfig 16 (Just (ipv4 "0.0.0.0" 7890, UDP_REUSEADDR))
 
 main :: IO ()
-main = runUDPSocket (Just "localhost") "6666" onConnection where
-  onConnection t = do
-    putStrLn "recv!"
-    unless (S.null $ fst t) $ do
-      putStr (show $ fst t)
+main = print ()
