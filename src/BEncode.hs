@@ -1,18 +1,18 @@
-
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module BEncode
-  ( BEncode (..),)
-where
+module BEncode (BEncode (..)) where
 
+import qualified Control.Exception as E
 import Data.Binary (Binary (get, put), Get, Put)
 import Data.Binary.Get (getByteString, lookAheadM)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
 import Data.Char (digitToInt, isDigit)
-import qualified Data.Map as M
+import Data.List (foldl')
+import qualified Data.Map.Strict as M
 import Data.Word ()
 import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack)
@@ -25,10 +25,10 @@ data BEncode
   deriving (Eq, Ord, Show, Generic)
 
 encodeString :: String -> Put
-encodeString = foldl (\a c -> a >> put c) (put ())
+encodeString = foldl' (\a c -> a >> put c) (put ())
 
 encodeByteString :: B.ByteString -> Put
-encodeByteString = B.foldl (\a c -> a >> put c) (put ())
+encodeByteString = B.foldl' (\a c -> a >> put c) (put ())
 
 instance Binary BEncode where
   put (BInt i) = put 'i' >> encodeString (show i) >> put 'e'
@@ -52,14 +52,14 @@ instance Binary BEncode where
       'l' -> readBList
       'd' -> readBDict
       _ -> fail ("ee bad encoding " ++ show c)
-      where
-        signDigit :: Get (Maybe (Integer, Integer))
-        signDigit = do
-          s <- get
-          case s of
-            '-' -> return (Just (-1, 0))
-            s | isDigit s -> return (Just (1, toInteger (digitToInt s)))
-            _ -> return Nothing
+    where
+      signDigit :: Get (Maybe (Integer, Integer))
+      signDigit = do
+        s <- get
+        case s of
+          '-' -> return (Just (-1, 0))
+          s | isDigit s -> return (Just (1, toInteger (digitToInt s)))
+          _ -> return Nothing
 
 throwError :: MonadFail m => Char -> m a
 throwError c = fail ("error decoding bytestring : " ++ show c)
@@ -78,11 +78,11 @@ readInt' acc = do
 
 readBInt :: (Integer, Integer) -> Get BEncode
 readBInt (sign, fd) = do
-      n <- readInt' fd
-      e <- get
-      if e == 'e'
-        then return (BInt (sign * toInteger n))
-        else throwError e
+  n <- readInt' fd
+  e <- get
+  if e == 'e'
+    then return (BInt (sign * toInteger n))
+    else throwError e
 
 readBStr :: Char -> Get BEncode
 readBStr d = do
@@ -94,27 +94,37 @@ readBStr d = do
 
 readBList :: Get BEncode
 readBList = do
-  items <- getItems []
-  e <- get
-  if e == 'e'
-    then return (BList items)
-    else throwError e
+  listOfBencode [] >>= \l -> return $ BList l
   where
-    getItems :: [BEncode] -> Get [BEncode]
-    getItems acc = do
-      i <- get
-      getItems (acc ++ [i])
+    listOfBencode :: [BEncode] -> Get [BEncode]
+    listOfBencode acc =
+      lookAheadM maybeEnd
+        >>= ( \case
+                Nothing -> do
+                  b <- get :: Get BEncode
+                  listOfBencode (acc ++ [b])
+                Just e -> return acc
+            )
 
 readBDict :: Get BEncode
 readBDict = do
-  items <- getKeysNItems []
-  e <- get
-  if e == 'e'
-    then return (BDict (M.fromList items))
-    else throwError e
+  listOfKVBencode [] >>= \l -> return $ BDict (M.fromList l)
   where
-    getKeysNItems :: [(C8.ByteString, BEncode)] -> Get [(C8.ByteString, BEncode)]
-    getKeysNItems acc = do
-      k <- get
-      v <- get
-      getKeysNItems (acc ++ [(k, v)])
+    listOfKVBencode :: [(B.ByteString, BEncode)] -> Get [(B.ByteString, BEncode)]
+    listOfKVBencode acc =
+      lookAheadM maybeEnd
+        >>= ( \case
+                Nothing -> do
+                  k <- get :: Get BEncode
+                  v <- get :: Get BEncode
+                  case k of
+                    BStr str -> listOfKVBencode (acc ++ [(str, v)])
+                    _ -> throwError 'k'
+                Just e -> return acc
+            )
+
+maybeEnd :: Get (Maybe Char)
+maybeEnd =
+  get >>= \case
+    'e' -> return $ Just 'e'
+    _ -> return Nothing

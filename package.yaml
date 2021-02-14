@@ -27,8 +27,11 @@ dependencies:
 - containers
 - generic-deriving
 - primitive
+- Z-IO
+- Z-Data
 - lens
-
+- QuickCheck
+- core-text
 
 library:
   source-dirs: src
@@ -52,6 +55,8 @@ executables:
     - primitive
     - Z-Data
     - Z-IO
+    - core-text
+
 
 tests:
   DHTPal-test:
